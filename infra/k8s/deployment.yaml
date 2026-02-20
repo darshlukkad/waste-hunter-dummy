@@ -1,0 +1,59 @@
+# ── MOCK Kubernetes Deployment — recommendation-engine ────────────────────────
+# Companion to main.tf. MiniMax (Phase 3) may also rewrite resource requests
+# here (requests.cpu / requests.memory) as part of right-sizing.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: recommendation-engine
+  namespace: production
+  labels:
+    app: recommendation-engine
+    team: platform
+    cost-center: eng-platform
+    # ⚠️  WASTE: resource requests set at node capacity, not actual usage
+    waste-hunter/scan: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: recommendation-engine
+  template:
+    metadata:
+      labels:
+        app: recommendation-engine
+    spec:
+      containers:
+        - name: api
+          image: company/recommendation-engine:v2.4.1
+          ports:
+            - containerPort: 8080
+          resources:
+            requests:
+              cpu: "4000m"     # ⚠️  WASTE: actual avg < 200m
+              memory: "16Gi"   # ⚠️  WASTE: actual avg ~2.4Gi
+            limits:
+              cpu: "8000m"
+              memory: "32Gi"
+          env:
+            - name: DB_HOST
+              valueFrom:
+                secretKeyRef:
+                  name: recommendation-db-secret
+                  key: host
+            - name: ENVIRONMENT
+              value: "production"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: recommendation-engine
+  namespace: production
+spec:
+  selector:
+    app: recommendation-engine
+  ports:
+    - protocol: TCP
+      port: 443
+      targetPort: 8080
+  type: ClusterIP
