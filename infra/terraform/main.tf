@@ -164,9 +164,9 @@ resource "aws_autoscaling_group" "app" {
   name                      = "wastehunter-asg"
   vpc_zone_identifier       = var.subnet_ids
   target_group_arns         = [aws_lb_target_group.app.arn]
-  min_size                  = 1
-  max_size                  = 3
-  desired_capacity          = 1
+  min_size                  = 3
+  max_size                  = 6
+  desired_capacity          = 3
   health_check_grace_period = 180
   health_check_type         = "ELB"
 
