@@ -17,6 +17,12 @@ variable "instance_type" {
   default     = "t3.medium"   # actual app uses ~2% CPU → WasteHunter recommends t3.micro
 }
 
+variable "instance_profile_name" {
+  description = "Name of an existing IAM instance profile to attach to EC2. Workshop accounts use 'LabInstanceProfile'."
+  type        = string
+  default     = "LabInstanceProfile"
+}
+
 variable "datadog_api_key" {
   description = "Datadog API key — installed on EC2 agent"
   type        = string

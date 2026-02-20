@@ -1,16 +1,11 @@
 # ── WasteHunter Target Infrastructure ────────────────────────────────────────
-# Real deployable Terraform for the "recommendation-engine" test service.
-# WasteHunter monitors this via Datadog and rewrites instance_type when idle.
+# Deploys into the DEFAULT VPC so no ec2:CreateVpc / iam:CreateRole needed.
+# Uses the Workshop pre-existing LabInstanceProfile for EC2.
 #
 # Deploy:
 #   cd infra/terraform
 #   terraform init
 #   terraform apply -var="datadog_api_key=<DD_API_KEY>"
-#
-# Note: AMI is hardcoded as var.ami_id because Workshop IAM blocks
-#       both ec2:DescribeImages and ssm:GetParameter.
-#       Default: ami-05572e392e45e5900 (AL2023, us-west-2, Feb 2025)
-#       Override: -var="ami_id=<AMI_ID>" for other regions/dates.
 #
 # Estimated cost: ~$0.04/hr (t3.medium on-demand, us-west-2)
 # WasteHunter will recommend: t3.medium → t3.micro (saves ~75%)
@@ -29,58 +24,27 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ── Networking ────────────────────────────────────────────────────────────────
-resource "aws_vpc" "main" {
-  cidr_block           = "10.0.0.0/16"
-  enable_dns_hostnames = true
-  enable_dns_support   = true
-  tags = { Name = "wastehunter-vpc" }
+# ── Use existing default VPC + subnets (no CreateVpc permission needed) ───────
+data "aws_vpc" "default" {
+  default = true
 }
 
-resource "aws_internet_gateway" "main" {
-  vpc_id = aws_vpc.main.id
-  tags   = { Name = "wastehunter-igw" }
-}
-
-resource "aws_subnet" "public_a" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.1.0/24"
-  availability_zone       = "${var.aws_region}a"
-  map_public_ip_on_launch = true
-  tags = { Name = "wastehunter-public-a" }
-}
-
-resource "aws_subnet" "public_b" {
-  vpc_id                  = aws_vpc.main.id
-  cidr_block              = "10.0.2.0/24"
-  availability_zone       = "${var.aws_region}b"
-  map_public_ip_on_launch = true
-  tags = { Name = "wastehunter-public-b" }
-}
-
-resource "aws_route_table" "public" {
-  vpc_id = aws_vpc.main.id
-  route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.main.id
+data "aws_subnets" "default" {
+  filter {
+    name   = "vpc-id"
+    values = [data.aws_vpc.default.id]
   }
-  tags = { Name = "wastehunter-public-rt" }
 }
 
-resource "aws_route_table_association" "a" {
-  subnet_id      = aws_subnet.public_a.id
-  route_table_id = aws_route_table.public.id
-}
-
-resource "aws_route_table_association" "b" {
-  subnet_id      = aws_subnet.public_b.id
-  route_table_id = aws_route_table.public.id
+# ── Use Workshop pre-existing LabInstanceProfile (no CreateRole needed) ───────
+data "aws_iam_instance_profile" "lab" {
+  name = var.instance_profile_name
 }
 
 # ── Security Groups ───────────────────────────────────────────────────────────
 resource "aws_security_group" "alb" {
   name   = "wastehunter-alb-sg"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.default.id
   ingress {
     from_port   = 80
     to_port     = 80
@@ -98,7 +62,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_security_group" "ec2" {
   name   = "wastehunter-ec2-sg"
-  vpc_id = aws_vpc.main.id
+  vpc_id = data.aws_vpc.default.id
   ingress {
     description     = "App traffic from ALB"
     from_port       = 8080
@@ -115,41 +79,13 @@ resource "aws_security_group" "ec2" {
   tags = { Name = "wastehunter-ec2-sg" }
 }
 
-# ── IAM: EC2 can write CloudWatch metrics + use SSM ──────────────────────────
-resource "aws_iam_role" "ec2" {
-  name = "wastehunter-ec2-role"
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [{
-      Action    = "sts:AssumeRole"
-      Effect    = "Allow"
-      Principal = { Service = "ec2.amazonaws.com" }
-    }]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "cloudwatch" {
-  role       = aws_iam_role.ec2.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
-}
-
-resource "aws_iam_role_policy_attachment" "ssm" {
-  role       = aws_iam_role.ec2.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
-}
-
-resource "aws_iam_instance_profile" "ec2" {
-  name = "wastehunter-ec2-profile"
-  role = aws_iam_role.ec2.name
-}
-
 # ── Load Balancer ─────────────────────────────────────────────────────────────
 resource "aws_lb" "main" {
   name               = "wastehunter-alb"
   internal           = false
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb.id]
-  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  subnets            = data.aws_subnets.default.ids
   tags               = { Name = "wastehunter-alb" }
 }
 
@@ -157,7 +93,7 @@ resource "aws_lb_target_group" "app" {
   name     = "wastehunter-tg"
   port     = 8080
   protocol = "HTTP"
-  vpc_id   = aws_vpc.main.id
+  vpc_id   = data.aws_vpc.default.id
 
   health_check {
     path                = "/health"
@@ -186,7 +122,7 @@ resource "aws_launch_template" "app" {
   instance_type = var.instance_type   # ⚠️ WASTE TARGET — WasteHunter rewrites this line
 
   iam_instance_profile {
-    arn = aws_iam_instance_profile.ec2.arn
+    arn = data.aws_iam_instance_profile.lab.arn
   }
 
   network_interfaces {
@@ -215,7 +151,7 @@ resource "aws_launch_template" "app" {
 # ── Auto Scaling Group ────────────────────────────────────────────────────────
 resource "aws_autoscaling_group" "app" {
   name                      = "wastehunter-asg"
-  vpc_zone_identifier       = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  vpc_zone_identifier       = data.aws_subnets.default.ids
   target_group_arns         = [aws_lb_target_group.app.arn]
   min_size                  = 1
   max_size                  = 3
