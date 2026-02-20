@@ -1,12 +1,21 @@
 # Copy to terraform.tfvars and fill in your values
 # NEVER commit terraform.tfvars (contains secrets)
 
-aws_region      = "us-west-2"
-instance_type   = "t3.medium"
+aws_region = "us-west-2"
+
+# ── Find these in AWS Console → VPC ───────────────────────────────────────────
+# VPC: Console → VPC → Your VPCs → default VPC → copy VPC ID
+vpc_id = "vpc-XXXXXXXXXXXXXXXXX"
+
+# Subnets: Console → VPC → Subnets → filter by your VPC → pick 2 in different AZs
+subnet_ids = ["subnet-XXXXXXXXXXXXXXXXX", "subnet-YYYYYYYYYYYYYYYYY"]
+
+# ── EC2 ───────────────────────────────────────────────────────────────────────
+instance_type = "t3.medium"
+
+# AMI: Console → EC2 → AMI Catalog → search 'al2023' → copy ID for us-west-2
+ami_id = "ami-05572e392e45e5900"   # AL2023, us-west-2, Feb 2025
+
+# ── Datadog ───────────────────────────────────────────────────────────────────
 datadog_api_key = "YOUR_DATADOG_API_KEY"
 datadog_site    = "datadoghq.com"
-
-# AMI hardcoded because Workshop IAM blocks DescribeImages + ssm:GetParameter
-# Default (us-west-2, AL2023, Feb 2025): ami-05572e392e45e5900
-# Find latest: https://us-west-2.console.aws.amazon.com/ec2/home#AMICatalog
-# ami_id = "ami-05572e392e45e5900"
