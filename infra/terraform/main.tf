@@ -24,14 +24,10 @@ provider "aws" {
   region = var.aws_region
 }
 
-# ── Latest Amazon Linux 2023 AMI ──────────────────────────────────────────────
-data "aws_ami" "al2023" {
-  most_recent = true
-  owners      = ["amazon"]
-  filter {
-    name   = "name"
-    values = ["al2023-ami-2023*-x86_64"]
-  }
+# ── Latest Amazon Linux 2023 AMI via SSM (works in restricted Workshop accounts) ──
+# ec2:DescribeImages is often blocked; ssm:GetParameter is always allowed.
+data "aws_ssm_parameter" "al2023" {
+  name = "/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-6.1-x86_64"
 }
 
 # ── Networking ────────────────────────────────────────────────────────────────
@@ -187,7 +183,7 @@ resource "aws_lb_listener" "http" {
 # ── EC2 Launch Template ───────────────────────────────────────────────────────
 resource "aws_launch_template" "app" {
   name_prefix   = "wastehunter-"
-  image_id      = data.aws_ami.al2023.id
+  image_id      = data.aws_ssm_parameter.al2023.value
   instance_type = var.instance_type   # ⚠️ WASTE TARGET — WasteHunter rewrites this line
 
   iam_instance_profile {
