@@ -132,6 +132,16 @@ resource "aws_launch_template" "app" {
   image_id      = var.ami_id
   instance_type = var.instance_type   # ⚠️ WASTE TARGET — WasteHunter rewrites this line
 
+  # 20GB root volume — default 8GB is too small for Datadog agent (154MB + overhead)
+  block_device_mappings {
+    device_name = "/dev/xvda"
+    ebs {
+      volume_size           = 20
+      volume_type           = "gp3"
+      delete_on_termination = true
+    }
+  }
+
   iam_instance_profile {
     arn = aws_iam_instance_profile.ec2.arn
   }
