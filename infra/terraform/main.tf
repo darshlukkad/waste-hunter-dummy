@@ -19,7 +19,7 @@ provider "aws" {
 # ── EC2 Instance (WASTE TARGET) ───────────────────────────────────────────────
 resource "aws_instance" "prod_api_server_03" {
   ami           = "ami-0c02fb55956c7d316"   # Amazon Linux 2
-  instance_type = "m5.4xlarge"              # ⚠️  WASTE: 16 vCPU / 64 GB, avg CPU 3.2%
+  instance_type = "m5.xlarge"               # WasteHunter: downsized from m5.4xlarge — saves $413/month
 
   tags = {
     Name        = "prod-api-server-03"
@@ -71,3 +71,5 @@ variable "db_password" {
   type      = string
   sensitive = true
 }
+
+--- END ---
