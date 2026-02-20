@@ -9,6 +9,7 @@
 #
 # Estimated cost: ~$0.04/hr (t3.medium on-demand, us-west-2)
 # WasteHunter will recommend: t3.medium → t3.micro (saves ~75%)
+# WasteHunter: downsized from t3.micro — saves $413/month
 # ─────────────────────────────────────────────────────────────────────────────
 
 terraform {
@@ -130,7 +131,7 @@ resource "aws_lb_listener" "http" {
 resource "aws_launch_template" "app" {
   name_prefix   = "wastehunter-"
   image_id      = var.ami_id
-  instance_type = var.instance_type   # ⚠️ WASTE TARGET — WasteHunter rewrites this line
+  instance_type = "t3.nano" # WasteHunter: downsized from t3.micro — saves $413/month
 
   # 20GB root volume — default 8GB is too small for Datadog agent (154MB + overhead)
   block_device_mappings {
